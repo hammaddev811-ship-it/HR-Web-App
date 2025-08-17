@@ -5,7 +5,8 @@ A modern, responsive HR management system built with Next.js, featuring employee
 ## ✨ **Features**
 
 ### 🔐 **Authentication System**
-- **Secure Login**: Email/password authentication with session management
+- **Employee ID Login**: Simple Employee ID and password authentication
+- **Modern UI Design**: Beautiful, responsive login interface with gradients
 - **Persistent Sessions**: Automatic login state restoration using localStorage
 - **Protected Routes**: Dashboard access only after successful authentication
 - **Logout Functionality**: Secure session termination
@@ -30,6 +31,7 @@ A modern, responsive HR management system built with Next.js, featuring employee
 - **Icons**: Lucide React for consistent iconography
 - **State Management**: React Context API for authentication
 - **Storage**: Browser localStorage for session persistence
+- **API Integration**: Real HRM system at https://focus-hrm.vercel.app/
 - **Deployment**: Vercel (production-ready)
 
 ## 🚀 **Getting Started**
@@ -63,11 +65,6 @@ A modern, responsive HR management system built with Next.js, featuring employee
 4. **Open your browser**
    Navigate to `http://localhost:3000`
 
-### **Demo Credentials**
-For testing purposes, use these credentials:
-- **Email**: `admin@company.com`
-- **Password**: `password123`
-
 ## 📁 **Project Structure**
 
 ```
@@ -92,11 +89,11 @@ hr-web-app/
 ## 🔐 **Authentication Flow**
 
 ### **Login Process**
-1. User enters email and password
+1. User enters Employee ID and password
 2. Form validation and submission
-3. Mock API call (replace with real authentication)
-4. Success: User data stored in localStorage
-5. Redirect to dashboard
+3. Real API call to https://focus-hrm.vercel.app/api/employee/login
+4. Success: Employee data stored in localStorage with API token
+5. Redirect to employee dashboard
 
 ### **Session Management**
 - **Automatic Login**: App checks localStorage on startup
@@ -110,30 +107,43 @@ hr-web-app/
 
 ## 🎯 **Customization**
 
-### **Adding Real Authentication**
-Replace the mock authentication in `AuthContext.tsx`:
+### **Current API Implementation**
+The app is already connected to your real HRM system at `https://focus-hrm.vercel.app/`:
 
 ```typescript
-const login = async (email: string, password: string) => {
-  try {
-    const response = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password })
-    })
-    
-    if (response.ok) {
-      const data = await response.json()
-      // Handle successful login
-      return { success: true }
-    } else {
-      return { success: false, error: 'Invalid credentials' }
-    }
-  } catch (error) {
-    return { success: false, error: 'Network error' }
+// API Configuration (src/config/api.ts)
+export const API_CONFIG = {
+  BASE_URL: 'https://focus-hrm.vercel.app',
+  ENDPOINTS: {
+    EMPLOYEE_LOGIN: '/api/employee/login',
+    EMPLOYEE_LOGOUT: '/api/employee/logout',
+    EMPLOYEE_PROFILE: '/api/employee/profile',
+    EMPLOYEE_CHECK_IN: '/api/employee/attendance/checkin',
+    EMPLOYEE_CHECK_OUT: '/api/employee/attendance/checkout',
+    EMPLOYEE_ATTENDANCE_HISTORY: '/api/employee/attendance/history',
+    EMPLOYEE_DASHBOARD: '/api/employee/dashboard'
   }
 }
+
+// Login function (src/contexts/AuthContext.tsx)
+const login = async (employeeId: string, password: string) => {
+  const response = await fetch(getApiEndpoint('EMPLOYEE_LOGIN'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ employeeId, password })
+  })
+  // Handle response...
+}
 ```
+
+### **Employee API Endpoints Available**
+- **POST** `/api/employee/login` - Employee authentication
+- **POST** `/api/employee/logout` - Employee session termination
+- **GET** `/api/employee/profile` - Employee profile data
+- **POST** `/api/employee/attendance/checkin` - Employee check-in
+- **POST** `/api/employee/attendance/checkout` - Employee check-out
+- **GET** `/api/employee/attendance/history` - Employee attendance records
+- **GET** `/api/employee/dashboard` - Employee dashboard data
 
 ### **Styling Customization**
 - **Colors**: Modify `tailwind.config.js` primary colors
@@ -164,6 +174,14 @@ This web app is designed to work seamlessly with the React Native mobile app thr
 - **Docker**: Containerized deployment
 
 ## 🔧 **Development**
+
+### **API Configuration**
+The app uses a centralized API configuration system:
+
+- **Base URL**: `https://focus-hrm.vercel.app`
+- **Configuration File**: `src/config/api.ts`
+- **Endpoint Management**: Centralized endpoint definitions
+- **Environment Support**: Easy to switch between dev/prod URLs
 
 ### **Available Scripts**
 - `npm run dev` - Start development server
