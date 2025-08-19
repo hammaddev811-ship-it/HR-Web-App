@@ -392,10 +392,24 @@ export default function Dashboard() {
   const handleCheckOut = async () => {
     setIsCheckingOut(true)
     try {
-      // Since the current API doesn't have a separate checkout endpoint,
-      // we'll create a local checkout record for now
-      // TODO: Implement proper checkout API endpoint
+      // Validate user data and token
+      if (!user?.employeeId) {
+        displayErrorModal('User Data Error', 'User data not available. Please login again.', 'warning')
+        setIsCheckingOut(false)
+        return
+      }
       
+      const token = localStorage.getItem('hr_token')
+      if (!token) {
+        displayErrorModal('Authentication Error', 'Authentication token not found. Please login again.', 'warning')
+        setIsCheckingOut(false)
+        return
+      }
+      
+      console.log('User data:', user)
+      console.log('Token available:', !!token)
+      console.log('Current location:', currentLocation)
+
       // Calculate distance from assigned location (if available)
       let distance = 0
       if (currentLocation && user?.assignedLocation?.coordinates) {
@@ -419,30 +433,22 @@ export default function Dashboard() {
         distance = Math.round(R * c) // Distance in meters
       }
 
-      // For now, create a local checkout record
-      // In the future, this should call a proper checkout API
-      const newRecord: AttendanceRecord = {
-        id: Date.now().toString(),
-        employeeId: user?.employeeId || '',
-        employeeName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
-        type: 'checkout',
+      // Call real employee check-out API
+      const requestBody = {
+        employeeId: user?.employeeId,
         timestamp: new Date().toISOString(),
-        location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
+        location: currentLocation ? {
+          latitude: currentLocation.lat,
+          longitude: currentLocation.lng,
+          accuracy: 10 // Default accuracy
+        } : null,
+        distance: distance,
         status: distance <= 500 ? 'normal' : 'suspicious'
       }
-
-      setAttendanceRecords(prev => [newRecord, ...prev])
-
-      // Show success modal
-      setModalData({
-        type: 'checkout',
-        timestamp: newRecord.timestamp,
-        location: newRecord.location
-      })
-      setShowModal(true)
-
-      // TODO: When checkout API is implemented, replace the above with:
-      /*
+      
+      console.log('Sending check-out request:', requestBody)
+      console.log('API endpoint:', getApiEndpoint('EMPLOYEE_CHECK_OUT'))
+      
       const response = await fetch(getApiEndpoint('EMPLOYEE_CHECK_OUT'), {
         method: 'POST',
         headers: {
@@ -450,23 +456,78 @@ export default function Dashboard() {
           'Accept': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('hr_token')}`
         },
-        body: JSON.stringify({
-          employeeId: user?.employeeId,
-          timestamp: new Date().toISOString(),
-          location: currentLocation ? {
-            latitude: currentLocation.lat,
-            longitude: currentLocation.lng,
-            accuracy: 10
-          } : null,
-          distance: distance,
-          status: distance <= 500 ? 'normal' : 'suspicious'
-        })
+        body: JSON.stringify(requestBody)
       })
-      */
 
+      console.log('Response status:', response.status)
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+      console.log('Response ok:', response.ok)
+
+      if (response.ok) {
+        const data = await response.json()
+        console.log('Check-out API Response:', data)
+
+        // Create local record for UI
+        const newRecord: AttendanceRecord = {
+          id: Date.now().toString(),
+          employeeId: user?.employeeId || '',
+          employeeName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+          type: 'checkout',
+          timestamp: new Date().toISOString(),
+          location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
+          status: distance <= 500 ? 'normal' : 'suspicious'
+        }
+
+        console.log('Created new checkout record:', newRecord)
+        console.log('Current attendance records before update:', attendanceRecords)
+        
+        setAttendanceRecords(prev => {
+          const updated = [newRecord, ...prev]
+          console.log('Updated attendance records:', updated)
+          return updated
+        })
+
+        // Show success modal
+        setModalData({
+          type: 'checkout',
+          timestamp: newRecord.timestamp,
+          location: newRecord.location
+        })
+        setShowModal(true)
+      } else {
+        let errorData: any = {}
+        try {
+          errorData = await response.json()
+        } catch (parseError) {
+          console.log('Could not parse error response as JSON, using status code')
+        }
+        
+        console.error('Check-out API Error Status:', response.status)
+        console.error('Check-out API Error Headers:', Object.fromEntries(response.headers.entries()))
+        console.error('Check-out API Error Body:', errorData)
+        
+        let errorMessage = 'Check-out failed'
+        if (response.status === 401) {
+          errorMessage = 'Session expired. Please login again.'
+        } else if (response.status === 400) {
+          errorMessage = errorData.message || 'Invalid request data'
+        } else if (response.status === 409) {
+          errorMessage = 'Already checked out today'
+        } else if (response.status === 403) {
+          errorMessage = 'Access denied. Please check your permissions.'
+        } else if (response.status === 404) {
+          errorMessage = 'Check-out service not found'
+        } else if (response.status >= 500) {
+          errorMessage = 'Server error. Please try again later.'
+        } else {
+          errorMessage = `Check-out failed (${response.status})`
+        }
+        
+        displayErrorModal('Check-out Failed', errorMessage, 'error')
+      }
     } catch (error) {
       console.error('Check-out error:', error)
-      displayErrorModal('Check-out Error', 'Check-out failed. Please try again.', 'error')
+      displayErrorModal('Check-out Error', 'Check-out failed. Please check your connection and try again.', 'error')
     } finally {
       setIsCheckingOut(false)
     }

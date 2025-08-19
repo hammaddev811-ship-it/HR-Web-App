@@ -1,13 +1,15 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: 'https://focus-hrm.vercel.app',
+  BASE_URL: process.env.NODE_ENV === 'development' 
+    ? 'http://localhost:3000' 
+    : 'https://print247.vercel.app',
   ENDPOINTS: {
     EMPLOYEE_LOGIN: '/api/employee/login',
     EMPLOYEE_LOGOUT: '/api/employee/logout',
     EMPLOYEE_PROFILE: '/api/employee/profile',
     EMPLOYEE_CHECK_IN: '/api/attendance/checkin',
-    EMPLOYEE_CHECK_OUT: '/api/attendance/checkin', // Using same endpoint for now
-    EMPLOYEE_ATTENDANCE_HISTORY: '/api/attendance/checkin', // Using checkin endpoint for history
+    EMPLOYEE_CHECK_OUT: '/api/attendance/checkout',
+    EMPLOYEE_ATTENDANCE_HISTORY: '/api/visits',
     EMPLOYEE_DASHBOARD: '/api/employee/dashboard'
   },
   TIMEOUT: 10000, // 10 seconds
