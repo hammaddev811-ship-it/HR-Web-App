@@ -1,8 +1,6 @@
 // API Configuration
 export const API_CONFIG = {
-  BASE_URL: process.env.NODE_ENV === 'development' 
-    ? 'http://localhost:3000' 
-    : 'https://print247.vercel.app',
+  BASE_URL: 'https://focus-hrm.vercel.app',
   ENDPOINTS: {
     EMPLOYEE_LOGIN: '/api/employee/login',
     EMPLOYEE_LOGOUT: '/api/employee/logout',
