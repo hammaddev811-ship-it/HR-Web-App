@@ -46,6 +46,14 @@ export default function Dashboard() {
     message: string
     type: 'error' | 'warning' | 'info'
   } | null>(null)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [confirmModalData, setConfirmModalData] = useState<{
+    title: string
+    message: string
+    type: 'checkin' | 'checkout'
+    onConfirm: () => void
+    onCancel: () => void
+  } | null>(null)
 
   const { user, logout } = useAuth()
 
@@ -57,6 +65,16 @@ export default function Dashboard() {
   const closeErrorModal = () => {
     setShowErrorModal(false)
     setErrorModalData(null)
+  }
+
+  const closeConfirmModal = () => {
+    setShowConfirmModal(false)
+    setConfirmModalData(null)
+  }
+
+  const showConfirmDialog = (title: string, message: string, type: 'checkin' | 'checkout', onConfirm: () => void, onCancel: () => void) => {
+    setConfirmModalData({ title, message, type, onConfirm, onCancel })
+    setShowConfirmModal(true)
   }
 
   const displayErrorModal = (title: string, message: string, type: 'error' | 'warning' | 'info' = 'error') => {
@@ -261,9 +279,41 @@ export default function Dashboard() {
         setIsCheckingIn(false)
         return
       }
+
+      // Warning for multiple check-ins
+      if (hasCheckedInToday) {
+        showConfirmDialog(
+          '⚠️ Multiple Check-in Warning',
+          'You have already checked in today. Checking in again will mark you as a DOMINANT employee.\n\nThis action is tracked and reported to HR. Do you want to continue?',
+          'checkin',
+          () => {
+            // User confirmed, proceed with check-in
+            closeConfirmModal()
+            proceedWithCheckIn()
+          },
+          () => {
+            // User canceled
+            closeConfirmModal()
+            setIsCheckingIn(false)
+          }
+        )
+        return
+      }
       
+      // Proceed with normal check-in
+      proceedWithCheckIn()
+    } catch (error) {
+      console.error('Check-in error:', error)
+      displayErrorModal('Check-in Error', 'Check-in failed. Please check your connection and try again.', 'error')
+    } finally {
+      setIsCheckingIn(false)
+    }
+  }
+
+  const proceedWithCheckIn = async () => {
+    try {
       console.log('User data:', user)
-      console.log('Token available:', !!token)
+      console.log('Token available:', !!localStorage.getItem('hr_token'))
       console.log('Current location:', currentLocation)
 
       // Calculate distance from assigned location (if available)
@@ -323,7 +373,30 @@ export default function Dashboard() {
         const data = await response.json()
         console.log('Check-in API Response:', data)
 
-        // Create local record for UI
+        // Handle dominant employee detection
+        if (data.attendanceAction === 'dominant') {
+          displayErrorModal(
+            '⚠️ Marked as Dominant Employee',
+            'You have been marked as a DOMINANT employee due to multiple check-ins today. This has been reported to HR for review.',
+            'warning'
+          )
+          
+          // Still update the UI to show the record
+          const newRecord: AttendanceRecord = {
+            id: Date.now().toString(),
+            employeeId: user?.employeeId || '',
+            employeeName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+            type: 'checkin',
+            timestamp: new Date().toISOString(),
+            location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
+            status: 'suspicious' // Mark as suspicious for dominant behavior
+          }
+
+          setAttendanceRecords(prev => [newRecord, ...prev])
+          return
+        }
+
+        // Create local record for UI (normal check-in)
         const newRecord: AttendanceRecord = {
           id: Date.now().toString(),
           employeeId: user?.employeeId || '',
@@ -384,8 +457,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Check-in error:', error)
       displayErrorModal('Check-in Error', 'Check-in failed. Please check your connection and try again.', 'error')
-    } finally {
-      setIsCheckingIn(false)
     }
   }
 
@@ -405,9 +476,41 @@ export default function Dashboard() {
         setIsCheckingOut(false)
         return
       }
+
+      // Warning for multiple check-outs
+      if (hasCheckedOutToday) {
+        showConfirmDialog(
+          '⚠️ Multiple Check-out Warning',
+          'You have already checked out today. Checking out again will mark you as a DOMINANT employee.\n\nThis action is tracked and reported to HR. Do you want to continue?',
+          'checkout',
+          () => {
+            // User confirmed, proceed with check-out
+            closeConfirmModal()
+            proceedWithCheckOut()
+          },
+          () => {
+            // User canceled
+            closeConfirmModal()
+            setIsCheckingOut(false)
+          }
+        )
+        return
+      }
       
+      // Proceed with normal check-out
+      proceedWithCheckOut()
+    } catch (error) {
+      console.error('Check-out error:', error)
+      displayErrorModal('Check-out Error', 'Check-out failed. Please check your connection and try again.', 'error')
+    } finally {
+      setIsCheckingOut(false)
+    }
+  }
+
+  const proceedWithCheckOut = async () => {
+    try {
       console.log('User data:', user)
-      console.log('Token available:', !!token)
+      console.log('Token available:', !!localStorage.getItem('hr_token'))
       console.log('Current location:', currentLocation)
 
       // Calculate distance from assigned location (if available)
@@ -467,7 +570,30 @@ export default function Dashboard() {
         const data = await response.json()
         console.log('Check-out API Response:', data)
 
-        // Create local record for UI
+        // Handle dominant employee detection
+        if (data.attendanceAction === 'dominant') {
+          displayErrorModal(
+            '⚠️ Marked as Dominant Employee',
+            'You have been marked as a DOMINANT employee due to multiple check-ins/outs today. This has been reported to HR for review.',
+            'warning'
+          )
+          
+          // Still update the UI to show the record
+          const newRecord: AttendanceRecord = {
+            id: Date.now().toString(),
+            employeeId: user?.employeeId || '',
+            employeeName: `${user?.firstName || ''} ${user?.lastName || ''}`.trim(),
+            type: 'checkout',
+            timestamp: new Date().toISOString(),
+            location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
+            status: 'suspicious' // Mark as suspicious for dominant behavior
+          }
+
+          setAttendanceRecords(prev => [newRecord, ...prev])
+          return
+        }
+
+        // Create local record for UI (normal check-out)
         const newRecord: AttendanceRecord = {
           id: Date.now().toString(),
           employeeId: user?.employeeId || '',
@@ -528,8 +654,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Check-out error:', error)
       displayErrorModal('Check-out Error', 'Check-out failed. Please check your connection and try again.', 'error')
-    } finally {
-      setIsCheckingOut(false)
     }
   }
 
@@ -701,8 +825,12 @@ export default function Dashboard() {
             <div className="space-y-3">
               <button
                 onClick={handleCheckIn}
-                disabled={isCheckingIn || hasCheckedInToday}
-                className="w-full btn-primary flex items-center justify-center space-x-2 disabled:opacity-50 py-3 sm:py-2"
+                disabled={isCheckingIn}
+                className={`w-full flex items-center justify-center space-x-2 disabled:opacity-50 py-3 sm:py-2 ${
+                  hasCheckedInToday 
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-600' 
+                    : 'btn-primary'
+                }`}
               >
                 {isCheckingIn ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
@@ -711,14 +839,18 @@ export default function Dashboard() {
                 )}
                 <span className="text-sm sm:text-base">
                   {isCheckingIn ? 'Checking In...' : 
-                   hasCheckedInToday ? 'Already Checked In' : 'Check In'}
+                   hasCheckedInToday ? '⚠️ Check In Again (Dominant)' : 'Check In'}
                 </span>
               </button>
 
               <button
                 onClick={handleCheckOut}
-                disabled={isCheckingOut || !hasCheckedInToday || hasCheckedOutToday}
-                className="w-full btn-secondary flex items-center justify-center space-x-2 disabled:opacity-50 py-3 sm:py-2"
+                disabled={isCheckingOut || !hasCheckedInToday}
+                className={`w-full flex items-center justify-center space-x-2 disabled:opacity-50 py-3 sm:py-2 ${
+                  hasCheckedOutToday 
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white border border-orange-600' 
+                    : 'btn-secondary'
+                }`}
               >
                 {isCheckingOut ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
@@ -728,7 +860,7 @@ export default function Dashboard() {
                 <span className="text-sm sm:text-base">
                   {isCheckingOut ? 'Checking Out...' : 
                    !hasCheckedInToday ? 'Check In First' :
-                   hasCheckedOutToday ? 'Already Checked Out' : 'Check Out'}
+                   hasCheckedOutToday ? '⚠️ Check Out Again (Dominant)' : 'Check Out'}
                 </span>
               </button>
             </div>
@@ -946,6 +1078,53 @@ export default function Dashboard() {
                     Go to Login
                   </button>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal */}
+      {showConfirmModal && confirmModalData && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={(e) => e.target === e.currentTarget && confirmModalData.onCancel()}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 overflow-hidden">
+            {/* Header */}
+            <div className={`px-6 py-4 ${
+              confirmModalData.type === 'checkin' ? 'bg-orange-500' : 'bg-orange-500'
+            } text-white text-center`}>
+              <div className="w-16 h-16 mx-auto mb-2 bg-white bg-opacity-20 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-8 h-8 text-white" />
+              </div>
+              <h3 className="text-xl font-bold">
+                {confirmModalData.title}
+              </h3>
+            </div>
+
+            {/* Content */}
+            <div className="px-6 py-6">
+              <div className="text-center mb-6">
+                <p className="text-gray-700 text-base leading-relaxed whitespace-pre-line">
+                  {confirmModalData.message}
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex space-x-3">
+                <button
+                  onClick={confirmModalData.onCancel}
+                  className="flex-1 py-3 px-4 rounded-xl font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmModalData.onConfirm}
+                  className="flex-1 py-3 px-4 rounded-xl font-medium text-white bg-orange-500 hover:bg-orange-600 transition-colors"
+                >
+                  Continue
+                </button>
               </div>
             </div>
           </div>
