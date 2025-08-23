@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiEndpoint } from '../config/api'
-import { calculateDistance } from '../../../lib/location-utils'
+import { calculateDistance } from '../lib/location-utils'
 
 interface AttendanceRecord {
   id: string
