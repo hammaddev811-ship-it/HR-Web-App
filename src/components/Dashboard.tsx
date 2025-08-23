@@ -23,7 +23,8 @@ interface AttendanceRecord {
   type: 'checkin' | 'checkout'
   timestamp: string
   location: string
-  status: 'normal' | 'suspicious'
+  status: 'normal' | 'suspicious' | 'dominant'
+  isDominant?: boolean
 }
 
 export default function Dashboard() {
@@ -236,7 +237,8 @@ export default function Dashboard() {
               location: record.location ? 
                 `${record.location.latitude?.toFixed(6) || 0}, ${record.location.longitude?.toFixed(6) || 0}` : 
                 'Unknown',
-              status: record.status || 'normal'
+              status: record.isDominant ? 'dominant' : (record.status || 'normal'),
+              isDominant: record.isDominant || false
             }))
             
             setAttendanceRecords(apiRecords)
@@ -389,7 +391,8 @@ export default function Dashboard() {
             type: 'checkin',
             timestamp: new Date().toISOString(),
             location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
-            status: 'suspicious' // Mark as suspicious for dominant behavior
+            status: 'dominant', // Mark as dominant behavior
+            isDominant: true
           }
 
           setAttendanceRecords(prev => [newRecord, ...prev])
@@ -441,7 +444,7 @@ export default function Dashboard() {
         } else if (response.status === 400) {
           errorMessage = errorData.message || 'Invalid request data'
         } else if (response.status === 409) {
-          errorMessage = 'Already checked in today'
+          errorMessage = 'Attendance conflict detected'
         } else if (response.status === 403) {
           errorMessage = 'Access denied. Please check your permissions.'
         } else if (response.status === 404) {
@@ -586,7 +589,8 @@ export default function Dashboard() {
             type: 'checkout',
             timestamp: new Date().toISOString(),
             location: currentLocation ? `${currentLocation.lat.toFixed(6)}, ${currentLocation.lng.toFixed(6)}` : 'Unknown',
-            status: 'suspicious' // Mark as suspicious for dominant behavior
+            status: 'dominant', // Mark as dominant behavior
+            isDominant: true
           }
 
           setAttendanceRecords(prev => [newRecord, ...prev])
@@ -638,7 +642,7 @@ export default function Dashboard() {
         } else if (response.status === 400) {
           errorMessage = errorData.message || 'Invalid request data'
         } else if (response.status === 409) {
-          errorMessage = 'Already checked out today'
+          errorMessage = 'Checkout conflict detected'
         } else if (response.status === 403) {
           errorMessage = 'Access denied. Please check your permissions.'
         } else if (response.status === 404) {
@@ -680,9 +684,58 @@ export default function Dashboard() {
       case 'normal':
         return <CheckCircle className="w-4 h-4 text-green-500" />
       case 'suspicious':
-        return <XCircle className="w-4 h-4 text-yellow-500" />
+        return <AlertCircle className="w-4 h-4 text-yellow-500" />
+      case 'dominant':
+        return <AlertCircle className="w-4 h-4 text-red-500" />
       default:
         return <XCircle className="w-4 h-4 text-red-500" />
+    }
+  }
+
+  // Function to get attendance status badge based on attendanceStatus value
+  const getAttendanceStatusBadge = (attendanceStatus: number) => {
+    switch (attendanceStatus) {
+      case 0:
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            Absent
+          </span>
+        )
+      case 1:
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+            Present
+          </span>
+        )
+      case 2:
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            Leave
+          </span>
+        )
+      case 6:
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+            ⚠️ Dominant
+          </span>
+        )
+      default:
+        return (
+          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+            Unknown
+          </span>
+        )
+    }
+  }
+
+  // Function to get attendance status text
+  const getAttendanceStatusText = (attendanceStatus: number) => {
+    switch (attendanceStatus) {
+      case 0: return 'Absent'
+      case 1: return 'Present'
+      case 2: return 'Leave'
+      case 6: return 'Dominant (Multiple Check-ins)'
+      default: return 'Unknown'
     }
   }
 
@@ -913,13 +966,22 @@ export default function Dashboard() {
           ) : (
             <div className="space-y-3">
               {attendanceRecords.map((record) => (
-                <div key={record.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 bg-gray-50 rounded-lg space-y-2 sm:space-y-0">
+                <div key={record.id} className={`flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg space-y-2 sm:space-y-0 ${
+                  record.status === 'dominant' ? 'bg-red-50 border border-red-200' : 'bg-gray-50'
+                }`}>
                   <div className="flex items-center space-x-3 w-full sm:w-auto">
                     {getTypeIcon(record.type)}
                     <div className="min-w-0 flex-1">
-                      <p className="font-medium text-gray-900 text-sm sm:text-base">
-                        {record.type === 'checkin' ? 'Checked In' : 'Checked Out'}
-                      </p>
+                      <div className="flex items-center space-x-2">
+                        <p className="font-medium text-gray-900 text-sm sm:text-base">
+                          {record.type === 'checkin' ? 'Checked In' : 'Checked Out'}
+                        </p>
+                        {record.status === 'dominant' && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            ⚠️ Dominant
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs sm:text-sm text-gray-500">
                         {new Date(record.timestamp).toLocaleString()}
                       </p>
