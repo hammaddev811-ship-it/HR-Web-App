@@ -430,7 +430,7 @@ export default function Dashboard() {
             isDominant: true
           }
 
-                            setAttendanceRecords(prev => [newRecord, ...prev])
+          setAttendanceRecords(prev => [newRecord, ...prev])
           setHasCheckedInToday(true)
           console.log('✅ Check-in completed (dominant), resetting loading state')
           setIsCheckingIn(false)
