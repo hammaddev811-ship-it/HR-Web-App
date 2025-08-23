@@ -942,7 +942,7 @@ export default function Dashboard() {
         </div> */}
 
         {/* Debug Section - Loading State */}
-        <div className="card mb-4 bg-green-50 border-green-200">
+        {/* <div className="card mb-4 bg-green-50 border-green-200">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-green-800">Loading State Debug</h3>
@@ -963,10 +963,10 @@ export default function Dashboard() {
               Debug States
             </button>
           </div>
-        </div>
+        </div> */}
 
         {/* Debug Section - Distance Calculation Test */}
-        <div className="card mb-4 bg-blue-50 border-blue-200">
+        {/* <div className="card mb-4 bg-blue-50 border-blue-200">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-medium text-blue-800">Distance Calculation Test</h3>
@@ -981,7 +981,7 @@ export default function Dashboard() {
               Test Distance
             </button>
           </div>
-        </div>
+        </div> */}
 
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
