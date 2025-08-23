@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { getApiEndpoint } from '../config/api'
+import { calculateDistance } from '../../../lib/location-utils'
 
 interface AttendanceRecord {
   id: string
@@ -31,6 +32,11 @@ export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  
+  // Debug loading state changes
+  useEffect(() => {
+    console.log('🔄 Loading state changed - isCheckingIn:', isCheckingIn, 'isCheckingOut:', isCheckingOut)
+  }, [isCheckingIn, isCheckingOut])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null)
   const [hasCheckedInToday, setHasCheckedInToday] = useState(false)
@@ -142,6 +148,22 @@ export default function Dashboard() {
       console.error('API test error:', error)
       displayErrorModal('API Test Failed', 'API endpoint test failed. Check console for details.', 'error')
     }
+  }
+
+  const testDistanceCalculation = () => {
+    console.log('🧪 Testing distance calculation with sample coordinates...')
+    
+    // Test with coordinates similar to Mari Goodman's (Lahore area)
+    const testDistance = calculateDistance(31.4891, 74.363029, 31.4891, 74.367529)
+    console.log('Test distance (should be ~450m):', testDistance, 'meters')
+    
+    // Test with very small difference (should be ~50m)
+    const testDistance2 = calculateDistance(31.4891, 74.363029, 31.4895, 74.363029)
+    console.log('Test distance 2 (should be ~50m):', testDistance2, 'meters')
+    
+    // Test with same coordinates (should be 0m)
+    const testDistance3 = calculateDistance(31.4891, 74.363029, 31.4891, 74.363029)
+    console.log('Test distance 3 (should be 0m):', testDistance3, 'meters')
   }
 
   useEffect(() => {
@@ -266,6 +288,7 @@ export default function Dashboard() {
   }, [showModal])
 
   const handleCheckIn = async () => {
+    console.log('🔄 Starting check-in process...')
     setIsCheckingIn(true)
     try {
       // Validate user data and token
@@ -307,7 +330,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Check-in error:', error)
       displayErrorModal('Check-in Error', 'Check-in failed. Please check your connection and try again.', 'error')
-    } finally {
       setIsCheckingIn(false)
     }
   }
@@ -326,19 +348,32 @@ export default function Dashboard() {
         const currentLat = currentLocation.lat
         const currentLng = currentLocation.lng
         
-        // Calculate distance using Haversine formula
-        const R = 6371e3 // Earth's radius in meters
-        const φ1 = assignedLat * Math.PI / 180
-        const φ2 = currentLat * Math.PI / 180
-        const Δφ = (currentLat - assignedLat) * Math.PI / 180
-        const Δλ = (currentLng - assignedLng) * Math.PI / 180
+        console.log('📍 Distance calculation coordinates:')
+        console.log('  Assigned location:', { lat: assignedLat, lng: assignedLng })
+        console.log('  Current location:', { lat: currentLat, lng: currentLng })
+        console.log('  Coordinate types:', {
+          assignedLat: typeof assignedLat,
+          assignedLng: typeof assignedLng,
+          currentLat: typeof currentLat,
+          currentLng: typeof currentLng
+        })
+        console.log('  Raw values:', {
+          assignedLat: assignedLat,
+          assignedLng: assignedLng,
+          currentLat: currentLat,
+          currentLng: currentLng
+        })
         
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ/2) * Math.sin(Δλ/2)
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        distance = calculateDistance(assignedLat, assignedLng, currentLat, currentLng)
         
-        distance = Math.round(R * c) // Distance in meters
+        console.log('  Final calculated distance:', distance, 'meters')
+      } else {
+        console.log('❌ Cannot calculate distance:')
+        console.log('  Current location exists:', !!currentLocation)
+        console.log('  User assigned location exists:', !!user?.assignedLocation)
+        console.log('  Assigned coordinates exist:', !!user?.assignedLocation?.coordinates)
+        console.log('  Full user object:', user)
+        console.log('  Full assigned location:', user?.assignedLocation)
       }
 
       // Call real employee check-in API
@@ -395,7 +430,10 @@ export default function Dashboard() {
             isDominant: true
           }
 
-          setAttendanceRecords(prev => [newRecord, ...prev])
+                            setAttendanceRecords(prev => [newRecord, ...prev])
+          setHasCheckedInToday(true)
+          console.log('✅ Check-in completed (dominant), resetting loading state')
+          setIsCheckingIn(false)
           return
         }
 
@@ -419,6 +457,9 @@ export default function Dashboard() {
           return updated
         })
 
+        // Update today's status
+        setHasCheckedInToday(true)
+
         // Show success modal
         setModalData({
           type: 'checkin',
@@ -426,6 +467,8 @@ export default function Dashboard() {
           location: newRecord.location
         })
         setShowModal(true)
+        console.log('✅ Check-in completed (normal), resetting loading state')
+        setIsCheckingIn(false)
       } else {
         let errorData: any = {}
         try {
@@ -456,14 +499,18 @@ export default function Dashboard() {
         }
         
         displayErrorModal('Check-in Failed', errorMessage, 'error')
+        setIsCheckingIn(false)
       }
     } catch (error) {
       console.error('Check-in error:', error)
       displayErrorModal('Check-in Error', 'Check-in failed. Please check your connection and try again.', 'error')
+    } finally {
+      setIsCheckingIn(false)
     }
   }
 
   const handleCheckOut = async () => {
+    console.log('🔄 Starting check-out process...')
     setIsCheckingOut(true)
     try {
       // Validate user data and token
@@ -505,7 +552,6 @@ export default function Dashboard() {
     } catch (error) {
       console.error('Check-out error:', error)
       displayErrorModal('Check-out Error', 'Check-out failed. Please check your connection and try again.', 'error')
-    } finally {
       setIsCheckingOut(false)
     }
   }
@@ -524,19 +570,32 @@ export default function Dashboard() {
         const currentLat = currentLocation.lat
         const currentLng = currentLocation.lng
         
-        // Calculate distance using Haversine formula
-        const R = 6371e3 // Earth's radius in meters
-        const φ1 = assignedLat * Math.PI / 180
-        const φ2 = currentLat * Math.PI / 180
-        const Δφ = (currentLat - assignedLat) * Math.PI / 180
-        const Δλ = (currentLng - assignedLng) * Math.PI / 180
+        console.log('📍 Distance calculation coordinates (checkout):')
+        console.log('  Assigned location:', { lat: assignedLat, lng: assignedLng })
+        console.log('  Current location:', { lat: currentLat, lng: currentLng })
+        console.log('  Coordinate types:', {
+          assignedLat: typeof assignedLat,
+          assignedLng: typeof assignedLng,
+          currentLat: typeof currentLat,
+          currentLng: typeof currentLng
+        })
+        console.log('  Raw values:', {
+          assignedLat: assignedLat,
+          assignedLng: assignedLng,
+          currentLat: currentLat,
+          currentLng: currentLng
+        })
         
-        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
-                  Math.cos(φ1) * Math.cos(φ2) *
-                  Math.sin(Δλ/2) * Math.sin(Δλ/2)
-        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+        distance = calculateDistance(assignedLat, assignedLng, currentLat, currentLng)
         
-        distance = Math.round(R * c) // Distance in meters
+        console.log('  Final calculated distance:', distance, 'meters')
+      } else {
+        console.log('❌ Cannot calculate distance (checkout):')
+        console.log('  Current location exists:', !!currentLocation)
+        console.log('  User assigned location exists:', !!user?.assignedLocation)
+        console.log('  Assigned coordinates exist:', !!user?.assignedLocation?.coordinates)
+        console.log('  Full user object:', user)
+        console.log('  Full assigned location:', user?.assignedLocation)
       }
 
       // Call real employee check-out API
@@ -594,6 +653,9 @@ export default function Dashboard() {
           }
 
           setAttendanceRecords(prev => [newRecord, ...prev])
+          setHasCheckedOutToday(true)
+          console.log('✅ Check-out completed (dominant), resetting loading state')
+          setIsCheckingOut(false)
           return
         }
 
@@ -617,6 +679,9 @@ export default function Dashboard() {
           return updated
         })
 
+        // Update today's status
+        setHasCheckedOutToday(true)
+
         // Show success modal
         setModalData({
           type: 'checkout',
@@ -624,6 +689,8 @@ export default function Dashboard() {
           location: newRecord.location
         })
         setShowModal(true)
+        console.log('✅ Check-out completed (normal), resetting loading state')
+        setIsCheckingOut(false)
       } else {
         let errorData: any = {}
         try {
@@ -654,10 +721,13 @@ export default function Dashboard() {
         }
         
         displayErrorModal('Check-out Failed', errorMessage, 'error')
+        setIsCheckingOut(false)
       }
     } catch (error) {
       console.error('Check-out error:', error)
       displayErrorModal('Check-out Error', 'Check-out failed. Please check your connection and try again.', 'error')
+    } finally {
+      setIsCheckingOut(false)
     }
   }
 
@@ -871,6 +941,48 @@ export default function Dashboard() {
           </div>
         </div> */}
 
+        {/* Debug Section - Loading State */}
+        <div className="card mb-4 bg-green-50 border-green-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-green-800">Loading State Debug</h3>
+              <p className="text-xs text-green-600">
+                Current loading states: isCheckingIn: {String(isCheckingIn)}, isCheckingOut: {String(isCheckingOut)}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                console.log('Current loading states:', { isCheckingIn, isCheckingOut })
+                console.log('Button disabled states:', { 
+                  checkInDisabled: isCheckingIn, 
+                  checkOutDisabled: isCheckingOut || !hasCheckedInToday 
+                })
+              }}
+              className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
+            >
+              Debug States
+            </button>
+          </div>
+        </div>
+
+        {/* Debug Section - Distance Calculation Test */}
+        <div className="card mb-4 bg-blue-50 border-blue-200">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-medium text-blue-800">Distance Calculation Test</h3>
+              <p className="text-xs text-blue-600">
+                Test the distance calculation function with sample coordinates
+              </p>
+            </div>
+            <button
+              onClick={testDistanceCalculation}
+              className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
+            >
+              Test Distance
+            </button>
+          </div>
+        </div>
+
         {/* Quick Actions */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
           <div className="card">
@@ -891,7 +1003,7 @@ export default function Dashboard() {
                   <LogIn className="w-4 h-4" />
                 )}
                 <span className="text-sm sm:text-base">
-                  {isCheckingIn ? 'Checking In...' : 
+                  {isCheckingIn ? `Checking In... (${isCheckingIn})` : 
                    hasCheckedInToday ? '⚠️ Check In Again (Dominant)' : 'Check In'}
                 </span>
               </button>
@@ -911,7 +1023,7 @@ export default function Dashboard() {
                   <LogOut className="w-4 h-4" />
                 )}
                 <span className="text-sm sm:text-base">
-                  {isCheckingOut ? 'Checking Out...' : 
+                  {isCheckingOut ? `Checking Out... (${isCheckingOut})` : 
                    !hasCheckedInToday ? 'Check In First' :
                    hasCheckedOutToday ? '⚠️ Check Out Again (Dominant)' : 'Check Out'}
                 </span>
