@@ -7,6 +7,7 @@ export const API_CONFIG = {
     EMPLOYEE_PROFILE: '/api/employee/profile',
     EMPLOYEE_CHECK_IN: '/api/attendance/checkin',
     EMPLOYEE_CHECK_OUT: '/api/attendance/checkout',
+    EMPLOYEE_AUTO_CHECKOUT: '/api/attendance/auto-checkout',
     EMPLOYEE_ATTENDANCE_HISTORY: '/api/visits',
     EMPLOYEE_DASHBOARD: '/api/employee/dashboard'
   },

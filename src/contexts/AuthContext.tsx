@@ -147,14 +147,86 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const logout = async () => {
     try {
-      // Call logout API endpoint
-      const response = await fetch(getApiEndpoint('EMPLOYEE_LOGOUT'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('hr_token')}`
+      const token = localStorage.getItem('hr_token')
+      
+      // Check if user needs auto-checkout before logging out
+      if (user?.employeeId && token) {
+        try {
+          // Check today's attendance status
+          const attendanceResponse = await fetch(getApiEndpoint('EMPLOYEE_ATTENDANCE_HISTORY'), {
+            method: 'GET',
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${token}`
+            }
+          })
+
+          if (attendanceResponse.ok) {
+            const attendanceData = await attendanceResponse.json()
+            
+            if (attendanceData.success && attendanceData.data) {
+              // Check if employee has checked in today but not checked out
+              const today = new Date()
+              today.setHours(0, 0, 0, 0)
+              
+              const todayRecords = attendanceData.data.filter((record: any) => {
+                const recordDate = new Date(record.timestamp)
+                recordDate.setHours(0, 0, 0, 0)
+                return recordDate.getTime() === today.getTime()
+              })
+              
+              const hasCheckedIn = todayRecords.some((record: any) => record.type === 'checkin')
+              const hasCheckedOut = todayRecords.some((record: any) => record.type === 'checkout')
+              
+              // If checked in but not checked out, perform auto-checkout
+              if (hasCheckedIn && !hasCheckedOut) {
+                console.log('Employee needs auto-checkout before logout')
+                
+                const autoCheckoutResponse = await fetch(getApiEndpoint('EMPLOYEE_AUTO_CHECKOUT'), {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                  },
+                  body: JSON.stringify({
+                    employeeId: user.employeeId,
+                    reason: 'Auto-checkout on logout',
+                    timestamp: new Date().toISOString()
+                  })
+                })
+                
+                if (autoCheckoutResponse.ok) {
+                  const autoCheckoutData = await autoCheckoutResponse.json()
+                  console.log('Auto-checkout successful:', autoCheckoutData)
+                } else {
+                  console.warn('Auto-checkout failed, but continuing with logout')
+                }
+              }
+            }
+          }
+        } catch (autoCheckoutError) {
+          console.warn('Auto-checkout check failed, but continuing with logout:', autoCheckoutError)
         }
-      })
+      }
+      
+      // Proceed with normal logout
+      try {
+        const response = await fetch(getApiEndpoint('EMPLOYEE_LOGOUT'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        
+        if (response.ok) {
+          console.log('Logout API call successful')
+        } else {
+          console.warn('Logout API call failed, but clearing local data')
+        }
+      } catch (logoutApiError) {
+        console.warn('Logout API call failed, but clearing local data:', logoutApiError)
+      }
       
       // Clear local storage regardless of API response
       localStorage.removeItem('hr_user')
@@ -162,10 +234,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null)
       setIsAuthenticated(false)
       
-      console.log('Logout successful')
+      console.log('Logout completed')
     } catch (error) {
       console.error('Logout error:', error)
-      // Still clear local storage even if API call fails
+      // Still clear local storage even if everything fails
       localStorage.removeItem('hr_user')
       localStorage.removeItem('hr_token')
       setUser(null)

@@ -64,6 +64,30 @@ export default function Dashboard() {
 
   const { user, logout } = useAuth()
 
+  // Enhanced logout function with auto-checkout confirmation
+  const handleLogout = async () => {
+    // Check if employee has checked in but not checked out
+    if (hasCheckedInToday && !hasCheckedOutToday) {
+      showConfirmDialog(
+        '⚠️ Auto-Checkout Required',
+        'You have checked in today but haven\'t checked out yet.\n\nLogging out will automatically check you out. Do you want to continue?',
+        'checkout',
+        async () => {
+          closeConfirmModal()
+          // Proceed with logout (auto-checkout will be handled in AuthContext)
+          await logout()
+        },
+        () => {
+          closeConfirmModal()
+          // Cancel logout
+        }
+      )
+    } else {
+      // Normal logout
+      await logout()
+    }
+  }
+
   const closeModal = () => {
     setShowModal(false)
     setModalData(null)
@@ -846,7 +870,7 @@ export default function Dashboard() {
                   <p className="text-xs text-gray-500">{user?.department?.departmentName}</p>
                 </div>
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="btn-secondary flex items-center justify-center space-x-2 w-full sm:w-auto px-4 py-2"
                 >
                   <LogOut className="w-4 h-4" />
@@ -913,6 +937,19 @@ export default function Dashboard() {
               }
             </div>
           </div>
+          
+          {/* Auto-checkout warning */}
+          {hasCheckedInToday && !hasCheckedOutToday && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                <span className="text-sm text-yellow-800 font-medium">Auto-Checkout Active</span>
+              </div>
+              <p className="text-xs text-yellow-700 mt-1">
+                If you logout without checking out, you will be automatically checked out.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Debug Section - Remove this after fixing the issue */}
