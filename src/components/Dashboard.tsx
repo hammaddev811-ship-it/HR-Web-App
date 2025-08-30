@@ -32,11 +32,12 @@ export default function Dashboard() {
   const [currentTime, setCurrentTime] = useState(new Date())
   const [isCheckingIn, setIsCheckingIn] = useState(false)
   const [isCheckingOut, setIsCheckingOut] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   
   // Debug loading state changes
   useEffect(() => {
-    console.log('🔄 Loading state changed - isCheckingIn:', isCheckingIn, 'isCheckingOut:', isCheckingOut)
-  }, [isCheckingIn, isCheckingOut])
+    console.log('🔄 Loading state changed - isCheckingIn:', isCheckingIn, 'isCheckingOut:', isCheckingOut, 'isLoggingOut:', isLoggingOut)
+  }, [isCheckingIn, isCheckingOut, isLoggingOut])
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
   const [currentLocation, setCurrentLocation] = useState<{lat: number, lng: number} | null>(null)
   const [hasCheckedInToday, setHasCheckedInToday] = useState(false)
@@ -64,27 +65,67 @@ export default function Dashboard() {
 
   const { user, logout } = useAuth()
 
-  // Enhanced logout function with auto-checkout confirmation
+  // Enhanced logout function with auto-checkout confirmation and better error handling
   const handleLogout = async () => {
-    // Check if employee has checked in but not checked out
-    if (hasCheckedInToday && !hasCheckedOutToday) {
-      showConfirmDialog(
-        '⚠️ Auto-Checkout Required',
-        'You have checked in today but haven\'t checked out yet.\n\nLogging out will automatically check you out. Do you want to continue?',
-        'checkout',
-        async () => {
-          closeConfirmModal()
-          // Proceed with logout (auto-checkout will be handled in AuthContext)
+    try {
+      console.log('Logout initiated by user')
+      setIsLoggingOut(true)
+      
+      // Check if employee has checked in but not checked out
+      if (hasCheckedInToday && !hasCheckedOutToday) {
+        console.log('User has checked in but not checked out - showing confirmation')
+        showConfirmDialog(
+          '⚠️ Auto-Checkout Required',
+          'You have checked in today but haven\'t checked out yet.\n\nLogging out will automatically check you out. Do you want to continue?',
+          'checkout',
+          async () => {
+            console.log('User confirmed logout with auto-checkout')
+            closeConfirmModal()
+            
+            try {
+              // Proceed with logout (auto-checkout will be handled in AuthContext)
+              await logout()
+              // We no longer set isLoggingOut to false here, as we'll be redirected to login page
+            } catch (logoutError) {
+              console.error('Error during logout after confirmation:', logoutError)
+              displayErrorModal(
+                'Logout Error',
+                'An error occurred during logout. Please try again.',
+                'error'
+              )
+              setIsLoggingOut(false)
+            }
+          },
+          () => {
+            console.log('User cancelled logout')
+            closeConfirmModal()
+            setIsLoggingOut(false)
+          }
+        )
+      } else {
+        console.log('Normal logout - no auto-checkout needed')
+        try {
+          // Normal logout
           await logout()
-        },
-        () => {
-          closeConfirmModal()
-          // Cancel logout
+          // We no longer set isLoggingOut to false here, as we'll be redirected to login page
+        } catch (logoutError) {
+          console.error('Error during normal logout:', logoutError)
+          displayErrorModal(
+            'Logout Error',
+            'An error occurred during logout. Please try again.',
+            'error'
+          )
+          setIsLoggingOut(false)
         }
+      }
+    } catch (error) {
+      console.error('Unexpected error in logout handler:', error)
+      displayErrorModal(
+        'Logout Error',
+        'An unexpected error occurred. Please try again.',
+        'error'
       )
-    } else {
-      // Normal logout
-      await logout()
+      setIsLoggingOut(false)
     }
   }
 
@@ -310,6 +351,27 @@ export default function Dashboard() {
       return () => clearTimeout(timer)
     }
   }, [showModal])
+  
+  // Safety timeout to prevent stuck logout state
+  useEffect(() => {
+    let timeoutId: NodeJS.Timeout | null = null;
+    
+    if (isLoggingOut) {
+      timeoutId = setTimeout(() => {
+        console.log('Logout safety timeout triggered - resetting state')
+        setIsLoggingOut(false)
+        displayErrorModal(
+          'Logout Timeout',
+          'Logout took longer than expected. Please try again.',
+          'warning'
+        )
+      }, 10000) // 10-second safety timeout
+    }
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId)
+    }
+  }, [isLoggingOut])
 
   const handleCheckIn = async () => {
     console.log('🔄 Starting check-in process...')
@@ -871,10 +933,15 @@ export default function Dashboard() {
                 </div>
                 <button
                   onClick={handleLogout}
-                  className="btn-secondary flex items-center justify-center space-x-2 w-full sm:w-auto px-4 py-2"
+                  disabled={isLoggingOut}
+                  className="btn-secondary flex items-center justify-center space-x-2 w-full sm:w-auto px-4 py-2 disabled:opacity-50"
                 >
-                  <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
+                  {isLoggingOut ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <LogOut className="w-4 h-4" />
+                  )}
+                  <span>{isLoggingOut ? 'Logging out...' : 'Logout'}</span>
                 </button>
               </div>
             </div>
@@ -1341,6 +1408,30 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Logout Loading Overlay with timeout protection */}
+      {isLoggingOut && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center max-w-sm w-full mx-4">
+            <div className="w-16 h-16 mx-auto mb-4 bg-blue-100 rounded-full flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Logging Out</h3>
+            <p className="text-gray-600 mb-4">
+              {hasCheckedInToday && !hasCheckedOutToday 
+                ? 'Processing auto-checkout and logging you out...' 
+                : 'Please wait while we log you out safely...'}
+            </p>
+            <div className="flex items-center justify-center space-x-2 text-sm text-gray-500">
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+              <div className="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+
     </div>
   )
 }

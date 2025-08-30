@@ -152,6 +152,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Check if user needs auto-checkout before logging out
       if (user?.employeeId && token) {
         try {
+          console.log(`Starting auto-checkout check for employee: ${user.employeeId}`)
+          
           // Check today's attendance status
           const attendanceResponse = await fetch(getApiEndpoint('EMPLOYEE_ATTENDANCE_HISTORY'), {
             method: 'GET',
@@ -163,6 +165,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
           if (attendanceResponse.ok) {
             const attendanceData = await attendanceResponse.json()
+            console.log('Attendance data response:', attendanceData.success, attendanceData.data?.length)
             
             if (attendanceData.success && attendanceData.data) {
               // Check if employee has checked in today but not checked out
@@ -170,73 +173,124 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
               today.setHours(0, 0, 0, 0)
               
               const todayRecords = attendanceData.data.filter((record: any) => {
-                const recordDate = new Date(record.timestamp)
+                const recordDate = new Date(record.timestamp || record.createdAt)
                 recordDate.setHours(0, 0, 0, 0)
                 return recordDate.getTime() === today.getTime()
               })
               
+              console.log(`Found ${todayRecords.length} records for today:`, 
+                todayRecords.map((r: any) => `${r.type} at ${new Date(r.timestamp || r.createdAt).toLocaleTimeString()}`))
+              
               const hasCheckedIn = todayRecords.some((record: any) => record.type === 'checkin')
               const hasCheckedOut = todayRecords.some((record: any) => record.type === 'checkout')
+              
+              console.log('Check-in/out status:', { hasCheckedIn, hasCheckedOut })
               
               // If checked in but not checked out, perform auto-checkout
               if (hasCheckedIn && !hasCheckedOut) {
                 console.log('Employee needs auto-checkout before logout')
                 
+                // Try to get current location, but don't block logout if we can't
+                let locationData = null
+                try {
+                  const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                    if (navigator.geolocation) {
+                      navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        timeout: 3000, // Short timeout to not delay logout
+                        maximumAge: 60000 // Allow positions up to 1 minute old
+                      })
+                    } else {
+                      reject(new Error('Geolocation not supported'))
+                    }
+                  })
+                  
+                  locationData = {
+                    latitude: position.coords.latitude,
+                    longitude: position.coords.longitude,
+                    accuracy: position.coords.accuracy
+                  }
+                  console.log('Got location for auto-checkout:', locationData)
+                } catch (locError) {
+                  console.warn('Could not get location for auto-checkout:', locError)
+                  // Continue with auto-checkout without location
+                }
+                
+                const autoCheckoutPayload = {
+                  employeeId: user.employeeId,
+                  reason: 'Auto-checkout on logout',
+                  timestamp: new Date().toISOString(),
+                  location: locationData // Will be null if location unavailable
+                }
+                
+                console.log('Sending auto-checkout request:', autoCheckoutPayload)
+                console.log('Auto-checkout endpoint:', getApiEndpoint('EMPLOYEE_AUTO_CHECKOUT'))
+                
                 const autoCheckoutResponse = await fetch(getApiEndpoint('EMPLOYEE_AUTO_CHECKOUT'), {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
+                    'Accept': 'application/json',
                     'Authorization': `Bearer ${token}`
                   },
-                  body: JSON.stringify({
-                    employeeId: user.employeeId,
-                    reason: 'Auto-checkout on logout',
-                    timestamp: new Date().toISOString()
-                  })
+                  body: JSON.stringify(autoCheckoutPayload)
                 })
                 
                 if (autoCheckoutResponse.ok) {
                   const autoCheckoutData = await autoCheckoutResponse.json()
                   console.log('Auto-checkout successful:', autoCheckoutData)
                 } else {
-                  console.warn('Auto-checkout failed, but continuing with logout')
+                  const errorText = await autoCheckoutResponse.text().catch(() => 'No response body');
+                  console.warn('Auto-checkout failed with status:', autoCheckoutResponse.status, errorText)
+                  // We'll still continue with logout, but log the full error details
                 }
               }
             }
+          } else {
+            const errorText = await attendanceResponse.text().catch(() => 'No response body');
+            console.warn('Attendance check failed with status:', attendanceResponse.status, errorText)
           }
         } catch (autoCheckoutError) {
-          console.warn('Auto-checkout check failed, but continuing with logout:', autoCheckoutError)
+          console.warn('Auto-checkout check failed with error:', autoCheckoutError)
         }
       }
       
       // Proceed with normal logout
       try {
+        console.log('Sending logout request to API')
         const response = await fetch(getApiEndpoint('EMPLOYEE_LOGOUT'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Accept': 'application/json',
+            'Authorization': `Bearer ${token || ''}`
           }
         })
         
         if (response.ok) {
           console.log('Logout API call successful')
         } else {
-          console.warn('Logout API call failed, but clearing local data')
+          const errorText = await response.text().catch(() => 'No response body');
+          console.warn('Logout API call failed with status:', response.status, errorText)
+          // We'll still continue with cleanup
         }
       } catch (logoutApiError) {
-        console.warn('Logout API call failed, but clearing local data:', logoutApiError)
+        console.warn('Logout API call network error:', logoutApiError)
+        // We'll still continue with cleanup
       }
       
-      // Clear local storage regardless of API response
-      localStorage.removeItem('hr_user')
-      localStorage.removeItem('hr_token')
-      setUser(null)
-      setIsAuthenticated(false)
-      
-      console.log('Logout completed')
+      // Use a small timeout to ensure any pending console logs complete
+      // before we navigate away from the page
+      setTimeout(() => {
+        // Always clear local storage regardless of API response
+        console.log('Clearing local storage and resetting auth state')
+        localStorage.removeItem('hr_user')
+        localStorage.removeItem('hr_token')
+        setUser(null)
+        setIsAuthenticated(false)
+        console.log('Logout completed successfully')
+      }, 300)
     } catch (error) {
-      console.error('Logout error:', error)
+      console.error('Unexpected error during logout:', error)
       // Still clear local storage even if everything fails
       localStorage.removeItem('hr_user')
       localStorage.removeItem('hr_token')
